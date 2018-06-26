@@ -1,13 +1,27 @@
 package docker
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 )
 
-func PlayCode(code string) (string, error) {
+var supportedLang map[string]string
+
+func init() {
+	supportedLang = map[string]string{
+		"go":     "go",
+		"golang": "go",
+	}
+}
+
+func PlayCode(lang, code string) (string, error) {
+	if lang = supportedLang[lang]; lang == "" {
+		return "", fmt.Errorf("Unsupported language: %s", lang)
+	}
+
 	_, deferFunc, err := setupTempDir()
 	if err != nil {
 		return "", err
@@ -20,10 +34,14 @@ func PlayCode(code string) (string, error) {
 		return "", err
 	}
 
-	return PlayFile("code.piece")
+	return PlayFile(lang, "code.piece")
 }
 
-func PlayFile(file string) (string, error) {
+func PlayFile(lang, file string) (string, error) {
+	if lang = supportedLang[lang]; lang == "" {
+		return "", fmt.Errorf("Unsupported language: %s", lang)
+	}
+
 	path, err := filepath.Abs(file)
 	if err != nil {
 		return "", err
@@ -33,6 +51,7 @@ func PlayFile(file string) (string, error) {
 		"docker", "run", "--rm",
 		"-v", path+":/code/piece",
 		"-t", "flwos/playground",
+		"--lang", lang,
 		"--file", "/code/piece",
 	)
 	output, err := cmd.Output()

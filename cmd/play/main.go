@@ -9,8 +9,8 @@ import (
 )
 
 type Option struct {
-	Type string `flag:"t|go|File {type}"`
-	File string `flag:"f||File {name}"`
+	Lang string `flag:"t|go|programming {language}"`
+	File string `flag:"f||file {name}"`
 }
 
 func main() {
@@ -25,7 +25,7 @@ func main() {
 	var output string
 	var err error
 
-	switch opt.Type {
+	switch opt.Lang {
 	case "go":
 		output, err = playground.PlayGoFile(opt.File)
 		if err != nil {
