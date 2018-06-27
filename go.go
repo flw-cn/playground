@@ -5,7 +5,7 @@ import (
 	"os/exec"
 )
 
-func PlayGo(code string) (string, error) {
+func PlayGoString(code string) (string, error) {
 	_, deferFunc, err := setupTempDir()
 	if err != nil {
 		return "", err
@@ -34,8 +34,21 @@ func PlayGo(code string) (string, error) {
 		}
 	}
 
-	cmd = exec.Command("go", "run", "main.go")
-	output, err = cmd.CombinedOutput()
+	return PlayGoFile("main.go")
+}
+
+func PlayGoCode(file string) (string, error) {
+	content, err := ioutil.ReadFile(file)
+	if err != nil {
+		return "", err
+	}
+
+	return PlayGoString(string(content))
+}
+
+func PlayGoFile(file string) (string, error) {
+	cmd := exec.Command("go", "run", file)
+	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", &PlayError{
 			err:    err,
@@ -44,13 +57,4 @@ func PlayGo(code string) (string, error) {
 	}
 
 	return string(output), nil
-}
-
-func PlayGoFile(file string) (string, error) {
-	code, err := ioutil.ReadFile(file)
-	if err != nil {
-		return "", err
-	}
-
-	return PlayGo(string(code))
 }

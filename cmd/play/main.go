@@ -10,14 +10,15 @@ import (
 
 type Option struct {
 	Lang string `flag:"t|go|programming {language}"`
-	File string `flag:"f||file {name}"`
+	File string `flag:"f||{file} name"`
+	Code string `flag:"C||code pice {file}"`
 }
 
 func main() {
 	var opt Option
 	smartConfig.LoadConfig("play", "v0.1.0", &opt)
 
-	if opt.File == "" {
+	if opt.Code == "" && opt.File == "" {
 		fmt.Printf("Usage: %s --help\n", os.Args[0])
 		os.Exit(1)
 	}
@@ -27,10 +28,17 @@ func main() {
 
 	switch opt.Lang {
 	case "go":
-		output, err = playground.PlayGoFile(opt.File)
+		if opt.File != "" {
+			output, err = playground.PlayGoFile(opt.File)
+		} else if opt.Code != "" {
+			output, err = playground.PlayGoCode(opt.Code)
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-			fmt.Fprintf(os.Stderr, "%s", output)
+			pe, ok := err.(*playground.PlayError)
+			if ok {
+				fmt.Fprintf(os.Stderr, "%s", pe.Output())
+			}
 			return
 		}
 	}

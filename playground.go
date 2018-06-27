@@ -3,6 +3,7 @@ package playground
 import (
 	"io/ioutil"
 	"os"
+	"path/filepath"
 )
 
 type PlayError struct {
@@ -18,7 +19,7 @@ func (e *PlayError) Output() string {
 	return e.output
 }
 
-func setupTempDir() (string, func(), error) {
+func setupTempDir(file ...string) (string, func(), error) {
 	tmpdir, err := ioutil.TempDir("", "flw-playground-")
 	if err != nil {
 		return "", nil, err
@@ -28,6 +29,10 @@ func setupTempDir() (string, func(), error) {
 	if err != nil {
 		os.RemoveAll(tmpdir)
 		return "", nil, err
+	}
+
+	for _, f := range file {
+		os.Rename(f, filepath.Join(tmpdir, filepath.Base(f)))
 	}
 
 	err = os.Chdir(tmpdir)

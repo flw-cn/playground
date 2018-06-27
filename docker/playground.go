@@ -34,10 +34,14 @@ func PlayCode(lang, code string) (string, error) {
 		return "", err
 	}
 
-	return PlayFile(lang, "code.piece")
+	return play(lang, "code.piece", true)
 }
 
 func PlayFile(lang, file string) (string, error) {
+	return play(lang, file, false)
+}
+
+func play(lang, file string, isCodePice bool) (string, error) {
 	if lang = supportedLang[lang]; lang == "" {
 		return "", fmt.Errorf("Unsupported language: %s", lang)
 	}
@@ -47,13 +51,28 @@ func PlayFile(lang, file string) (string, error) {
 		return "", err
 	}
 
-	cmd := exec.Command(
-		"docker", "run", "--rm",
-		"-v", path+":/code/piece",
-		"-t", "flwos/playground",
-		"--lang", lang,
-		"--file", "/code/piece",
-	)
+	args := []string{
+		"run", "--rm",
+	}
+
+	if isCodePice {
+		args = append(args,
+			"-v", path+":/code/piece",
+			"-t", "flwos/playground",
+			"--lang", lang,
+			"--code", "/code/piece",
+		)
+	} else {
+		args = append(args,
+			"-v", path+":/code/main.go",
+			"-t", "flwos/playground",
+			"--lang", lang,
+			"--file", "/code/main.go",
+		)
+	}
+
+	fmt.Printf("RUN docker %v\n", args)
+	cmd := exec.Command("docker", args...)
 	output, err := cmd.Output()
 	if err != nil {
 		return string(output), err
