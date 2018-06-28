@@ -10,11 +10,34 @@ import (
 
 var supportedLang map[string]string
 
+var codeVolume struct {
+	dockerPath string
+	hostPath   string
+}
+
 func init() {
 	supportedLang = map[string]string{
 		"go":     "go",
 		"golang": "go",
 	}
+
+	codeVolume.dockerPath = "/"
+	codeVolume.hostPath = "/"
+}
+
+func Boarding(dockerPath, hostPath string) error {
+	if !filepath.IsAbs(dockerPath) {
+		return fmt.Errorf("%s is not an absolute path", dockerPath)
+	}
+
+	if !filepath.IsAbs(hostPath) {
+		return fmt.Errorf("%s is not an absolute path", hostPath)
+	}
+
+	codeVolume.dockerPath = dockerPath
+	codeVolume.hostPath = hostPath
+
+	return nil
 }
 
 func PlayCode(lang, code string) (string, error) {
@@ -46,7 +69,7 @@ func play(lang, file string, isCodePice bool) (string, error) {
 		return "", fmt.Errorf("Unsupported language: %s", lang)
 	}
 
-	path, err := filepath.Abs(file)
+	path, err := boarding(file)
 	if err != nil {
 		return "", err
 	}
@@ -71,7 +94,6 @@ func play(lang, file string, isCodePice bool) (string, error) {
 		)
 	}
 
-	fmt.Printf("RUN docker %v\n", args)
 	cmd := exec.Command("docker", args...)
 	output, err := cmd.Output()
 	if err != nil {
@@ -81,8 +103,31 @@ func play(lang, file string, isCodePice bool) (string, error) {
 	return string(output), nil
 }
 
+func boarding(file string) (string, error) {
+	if !filepath.IsAbs(file) {
+		var err error
+		file, err = filepath.Abs(file)
+		if err != nil {
+			return "", fmt.Errorf(
+				`filepath.Abs("%s") returns error: %v`,
+				file, err,
+			)
+		}
+	}
+
+	relPath, err := filepath.Rel(codeVolume.dockerPath, file)
+	if err != nil {
+		return "", fmt.Errorf(
+			`filepath.Rel("%s", "%s") returns error: %v`,
+			codeVolume.dockerPath, file, err,
+		)
+	}
+
+	return filepath.Join(codeVolume.hostPath, relPath), nil
+}
+
 func setupTempDir() (string, func(), error) {
-	tmpdir, err := ioutil.TempDir("", "flw-playground-")
+	tmpdir, err := ioutil.TempDir(codeVolume.dockerPath, "flw-playground-")
 	if err != nil {
 		return "", nil, err
 	}
