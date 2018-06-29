@@ -9,7 +9,7 @@ import (
 func main() {
 	code := `
 	cmd := exec.Command("uname", "-a")
-	output, _ := cmd.Output()
+	output, _ := cmd.CombinedOutput()
 	fmt.Printf("%s", output)
 `
 	output, err := docker.PlayCode(code)

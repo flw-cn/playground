@@ -1,18 +1,21 @@
 package docker
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 )
 
 var supportedLang map[string]string
 
 var codeVolume struct {
-	dockerPath string
 	hostPath   string
+	dockerPath string
 }
 
 func init() {
@@ -21,21 +24,26 @@ func init() {
 		"golang": "go",
 	}
 
-	codeVolume.dockerPath = "/"
-	codeVolume.hostPath = "/"
+	codeVolume.hostPath = ""
+	codeVolume.dockerPath = ""
 }
 
-func Boarding(dockerPath, hostPath string) error {
-	if !filepath.IsAbs(dockerPath) {
-		return fmt.Errorf("%s is not an absolute path", dockerPath)
-	}
-
-	if !filepath.IsAbs(hostPath) {
+func Boarding(hostPath, dockerPath string) error {
+	if hostPath == "" {
+		return errors.New("must provide playground path")
+	} else if !filepath.IsAbs(hostPath) {
 		return fmt.Errorf("%s is not an absolute path", hostPath)
+	} else {
+		codeVolume.hostPath = hostPath
 	}
 
-	codeVolume.dockerPath = dockerPath
-	codeVolume.hostPath = hostPath
+	if dockerPath == "" {
+		codeVolume.dockerPath = hostPath
+	} else if !filepath.IsAbs(dockerPath) {
+		return fmt.Errorf("%s is not an absolute path", dockerPath)
+	} else {
+		codeVolume.dockerPath = dockerPath
+	}
 
 	return nil
 }
@@ -75,7 +83,7 @@ func play(lang, file string, isCodePice bool) (string, error) {
 	}
 
 	args := []string{
-		"run", "--rm",
+		"create", "--rm",
 	}
 
 	if isCodePice {
@@ -94,9 +102,29 @@ func play(lang, file string, isCodePice bool) (string, error) {
 		)
 	}
 
-	cmd := exec.Command("docker", args...)
-	output, err := cmd.Output()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "docker", args...)
+	output, err := cmd.CombinedOutput()
 	if err != nil {
+		return "", fmt.Errorf("docker create failed: %s", err)
+	}
+
+	container := string(output)
+	fmt.Printf("container: %s", container)
+	if len(container) < 12 {
+		return "", errors.New("docker create failed")
+	}
+
+	container = container[0:12]
+	cmd = exec.CommandContext(ctx, "docker", "start", "--attach", container)
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		exec.Command("docker", "kill", container).Run()
+		if ctx.Err() != nil {
+			err = ctx.Err()
+		}
 		return string(output), err
 	}
 
