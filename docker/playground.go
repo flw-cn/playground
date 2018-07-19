@@ -69,7 +69,25 @@ func PlayCode(lang, code string) (string, error) {
 }
 
 func PlayFile(lang, file string) (string, error) {
-	return play(lang, file, false)
+	if lang = supportedLang[lang]; lang == "" {
+		return "", fmt.Errorf("Unsupported language: %s", lang)
+	}
+
+	tmpdir, deferFunc, err := setupTempDir()
+	if err != nil {
+		return "", err
+	}
+
+	defer deferFunc()
+
+	baseName := filepath.Base(file)
+	newFile := filepath.Join(tmpdir, baseName)
+	err = os.Rename(file, newFile)
+	if err != nil {
+		return "", err
+	}
+
+	return play(lang, newFile, false)
 }
 
 func play(lang, file string, isCodePice bool) (string, error) {
