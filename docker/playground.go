@@ -82,7 +82,7 @@ func PlayFile(lang, file string) (string, error) {
 
 	baseName := filepath.Base(file)
 	newFile := filepath.Join(tmpdir, baseName)
-	err = os.Rename(file, newFile)
+	err = CopyFile(file, newFile)
 	if err != nil {
 		return "", err
 	}
