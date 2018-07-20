@@ -1,14 +1,20 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
+
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
+	"github.com/docker/docker/client"
 )
 
 var supportedLang map[string]string
@@ -24,8 +30,8 @@ func init() {
 		"golang": "go",
 	}
 
-	codeVolume.hostPath = ""
-	codeVolume.dockerPath = ""
+	codeVolume.hostPath = "/tmp"
+	codeVolume.dockerPath = "/tmp"
 }
 
 func Boarding(hostPath, dockerPath string) error {
@@ -100,53 +106,76 @@ func play(lang, file string, isCodePice bool) (string, error) {
 		return "", err
 	}
 
-	args := []string{
-		"create", "--rm",
-	}
-
-	if isCodePice {
-		args = append(args,
-			"-v", path+":/code/piece",
-			"-t", "flwos/playground",
-			"--lang", lang,
-			"--code", "/code/piece",
-		)
-	} else {
-		args = append(args,
-			"-v", path+":/code/main.go",
-			"-t", "flwos/playground",
-			"--lang", lang,
-			"--file", "/code/main.go",
-		)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "docker", args...)
-	output, err := cmd.CombinedOutput()
+	cli, err := client.NewEnvClient()
 	if err != nil {
-		return "", fmt.Errorf("docker create failed: %s", err)
+		return "", err
 	}
 
-	container := string(output)
-	fmt.Printf("container: %s", container)
-	if len(container) < 12 {
-		return "", errors.New("docker create failed")
+	var cmd []string
+	var mountPoint string
+	if isCodePice {
+		mountPoint = "/code/piece"
+		cmd = []string{"--lang", lang, "--code", mountPoint}
+	} else {
+		mountPoint = "/code/main.go"
+		cmd = []string{"--lang", lang, "--file", mountPoint}
 	}
 
-	container = container[0:12]
-	cmd = exec.CommandContext(ctx, "docker", "start", "--attach", container)
-	output, err = cmd.CombinedOutput()
+	resp, err := cli.ContainerCreate(ctx,
+		&container.Config{
+			Image: "flwos/playground",
+			Tty:   true,
+			Cmd:   cmd,
+		},
+		&container.HostConfig{
+			Mounts: []mount.Mount{
+				{
+					Type:   mount.TypeBind,
+					Source: path,
+					Target: mountPoint,
+				},
+			},
+		},
+		nil, "",
+	)
 	if err != nil {
-		exec.Command("docker", "kill", container).Run()
-		if ctx.Err() != nil {
-			err = ctx.Err()
+		return "", err
+	}
+
+	containerID := resp.ID
+
+	defer cli.ContainerRemove(
+		context.Background(),
+		containerID,
+		types.ContainerRemoveOptions{Force: true},
+	)
+
+	err = cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{})
+	if err != nil {
+		return "", err
+	}
+
+	statusCh, errCh := cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
+	select {
+	case err := <-errCh:
+		if err != nil {
+			return "", err
 		}
-		return string(output), err
+	case <-statusCh:
 	}
 
-	return string(output), nil
+	out, err := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true})
+	if err != nil {
+		return "", err
+	}
+	buf := new(bytes.Buffer)
+	io.Copy(buf, out)
+
+	return buf.String(), nil
 }
 
 func boarding(file string) (string, error) {
